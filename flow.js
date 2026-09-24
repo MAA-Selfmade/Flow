@@ -1139,7 +1139,7 @@ class Component extends DCLogic {
 
     // Min dag
     const myItem = t => t.checklist.filter(c => c.by === s.me && !c.done)[0] || null;
-    const mine = s.tasks.filter(t => ['gang','review','pipeline'].indexOf(t.status) >= 0 && (t.owner === s.me || myItem(t)));
+    const mine = s.tasks.filter(t => t.status === 'gang' && (t.owner === s.me || myItem(t)));
     const keyDate = t => t.planned || (t.owner === s.me ? t.due : ((myItem(t) || {}).due || t.due));
     const dcmp = (x, y) => (keyDate(x) ? (keyDate(y) ? dayDiff(keyDate(x), keyDate(y)) : -1) : (keyDate(y) ? 1 : 0));
     const sorters = {
