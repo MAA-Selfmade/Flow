@@ -446,7 +446,7 @@ class Component extends DCLogic {
     this.snap('ændring af team');
     if (u.editId) {
       this.setState({ people: this.state.people.map(p => p.id === u.editId
-        ? Object.assign({}, p, { name, email: (u.email || '').trim().toLowerCase(), color: u.color, initials: this.initialsFor(name) }) : p),
+        ? Object.assign({}, p, { name, email: (u.email || '').trim().toLowerCase(), color: u.color, initials: name === p.name && p.initials ? p.initials : this.initialsFor(name) }) : p),
         pplUI: { open: true } });
     } else {
       const id = 'u' + Date.now();
@@ -1829,10 +1829,16 @@ window.FlowHelpers = { nextRecurDate, relTime, isoOf, addDays };
       // Invitationer: admin sender et login-link med mail fra Firebase
       async sendInvite(person, byId) {
         const email = (person.email || '').trim().toLowerCase();
-        await F.setDoc(F.doc(db, 'invites', email), { email, person: person.id, name: person.name, by: byId, ts: new Date().toISOString() });
         auth.languageCode = 'da';
         const url = location.origin + location.pathname + '?invite=1&e=' + encodeURIComponent(email);
-        await A.sendSignInLinkToEmail(auth, email, { url, handleCodeInApp: true });
+        try { await A.sendSignInLinkToEmail(auth, email, { url, handleCodeInApp: true }); }
+        catch (e) {
+          if (e && e.code === 'auth/operation-not-allowed') throw new Error('Login via mail-link er ikke slået til i Firebase (Authentication → Sign-in method → Email/Password → Email link).');
+          if (e && e.code === 'auth/unauthorized-continue-uri') throw new Error('Adressen ' + location.hostname + ' er ikke godkendt i Firebase (Authentication → Settings → Authorized domains).');
+          if (e && e.code === 'auth/quota-exceeded') throw new Error('Firebase har nået dagens grænse for mails. Prøv igen i morgen.');
+          throw e;
+        }
+        await F.setDoc(F.doc(db, 'invites', email), { email, person: person.id, name: person.name, by: byId, ts: new Date().toISOString() });
       },
       // Hemmeligheder (fx Teams-URL) ligger i databasen, ikke i de offentlige filer
       async getPrivate(id) { try { const d = await F.getDoc(F.doc(db, 'private', id)); return d.exists() ? d.data() : null; } catch (e) { return null; } },
@@ -2130,6 +2136,13 @@ window.FlowHelpers = { nextRecurDate, relTime, isoOf, addDays };
       : (people.find((p) => p.uid === user.uid) || (acc && acc.person ? people.find((p) => p.id === acc.person) : null)
         || (admin ? people.find((p) => p.email && p.email.toLowerCase() === user.email && !p.uid) : null));
     if (!me && !admin && (tries || 0) < 6) { await new Promise((r) => setTimeout(r, 1000)); return start(store, user, acc, (tries || 0) + 1); }
+    // Reparér initialer, der blev nulstillet ved redigering (fejl rettet 25/9)
+    const FIX = { u1: ['Louise', ['LO'], 'LK'], u2: ['Ditte', ['DI', 'DTV'], 'DT'] };
+    if (admin && store.mode === 'firebase' && people.some((p) => FIX[p.id] && p.name === FIX[p.id][0] && FIX[p.id][1].indexOf(p.initials) >= 0)) {
+      people = people.map((p) => FIX[p.id] && p.name === FIX[p.id][0] && FIX[p.id][1].indexOf(p.initials) >= 0 ? Object.assign({}, p, { initials: FIX[p.id][2] }) : p);
+      data.config.people = people;
+      await store.write([{ col: 'config', data: JSON.parse(stable({ people, projects: data.config.projects, labelDefs: data.config.labelDefs })) }]);
+    }
     // Engangs-kobling af e-mails til de importerede personer (på person-ID, ikke navn)
     const boot = CFG.bootstrapEmails || {};
     if (admin && store.mode === 'firebase' && people.some((p) => boot[p.id] && !p.email)) {
