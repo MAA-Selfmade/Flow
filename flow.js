@@ -457,8 +457,10 @@ class Component extends DCLogic {
   }
   sendInvite(p) {
     if (!p.email) { this.flash('Tilføj en e-mail på ' + p.name + ' først.'); return; }
-    this.flash('Sender invitation til ' + p.email + '…');
-    Promise.resolve(this.props.invite(p)).then(() => this.flash(p.name + ' har fået en mail med et link til at oprette sit login.'))
+    this.flash('Laver invitation til ' + p.name + '…');
+    Promise.resolve(this.props.invite(p)).then((r) => this.flash(r && r.teams
+        ? p.name + ' har fået invitationen i Teams.' + (r.copied ? ' Linket er også kopieret.' : '')
+        : (r && r.copied ? 'Linket til ' + p.name + ' er kopieret. Send det i Teams eller mail.' : 'Invitationen er oprettet.')))
       .catch((e) => this.flash('Invitationen kunne ikke sendes: ' + ((e && e.message) || e)));
   }
   approveAccess(a, link) {
@@ -1827,38 +1829,34 @@ window.FlowHelpers = { nextRecurDate, relTime, isoOf, addDays };
       watchAccess: (uid, cb) => F.onSnapshot(F.doc(db, 'access', uid), (d) => cb(d.exists() ? d.data() : null), () => cb(null)),
       watchRequests: (cb) => F.onSnapshot(F.collection(db, 'access'), (qs) => cb(qs.docs.map((d) => Object.assign({ uid: d.id }, d.data())))),
       setAccess: (uid, patch) => F.setDoc(F.doc(db, 'access', uid), clean(patch), { merge: true }),
-      // Invitationer: admin sender et login-link med mail fra Firebase
-      async sendInvite(person, byId) {
+      // Invitationer: admin laver et personligt link med en hemmelig nøgle; linket sendes via Teams
+      async createInvite(person, byId) {
         const email = (person.email || '').trim().toLowerCase();
-        auth.languageCode = 'da';
-        const url = location.origin + location.pathname + '?invite=1&e=' + encodeURIComponent(email);
-        try { await A.sendSignInLinkToEmail(auth, email, { url, handleCodeInApp: true }); }
-        catch (e) {
-          if (e && e.code === 'auth/operation-not-allowed') throw new Error('Login via mail-link er ikke slået til i Firebase (Authentication → Sign-in method → Email/Password → Email link).');
-          if (e && e.code === 'auth/unauthorized-continue-uri') throw new Error('Adressen ' + location.hostname + ' er ikke godkendt i Firebase (Authentication → Settings → Authorized domains).');
-          if (e && e.code === 'auth/quota-exceeded') throw new Error('Firebase har nået dagens grænse for mails. Prøv igen i morgen.');
-          throw e;
-        }
-        await F.setDoc(F.doc(db, 'invites', email), { email, person: person.id, name: person.name, by: byId, ts: new Date().toISOString() });
+        const b = new Uint8Array(24); crypto.getRandomValues(b);
+        const token = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+        await F.setDoc(F.doc(db, 'invites', email), { email, person: person.id, name: person.name, token, by: byId, ts: new Date().toISOString() });
+        const q = new URLSearchParams({ invite: token, e: email, p: person.id, n: person.name || '' });
+        return location.origin + location.pathname + '?' + q.toString();
       },
       // Hemmeligheder (fx Teams-URL) ligger i databasen, ikke i de offentlige filer
       async getPrivate(id) { try { const d = await F.getDoc(F.doc(db, 'private', id)); return d.exists() ? d.data() : null; } catch (e) { return null; } },
       setPrivate: (id, data) => F.setDoc(F.doc(db, 'private', id), clean(data)),
       watchInvites: (cb) => F.onSnapshot(F.collection(db, 'invites'), (qs) => cb(qs.docs.map((d) => d.data())), () => cb([])),
-      isInviteLink: () => A.isSignInWithEmailLink(auth, location.href),
+      isInviteLink: () => !!new URLSearchParams(location.search).get('invite'),
       inviteEmail: () => new URLSearchParams(location.search).get('e') || '',
       invitePromise: null,
       completeInvite(email, pw) {
-        const self = this;
+        const self = this, q = new URLSearchParams(location.search);
+        const token = q.get('invite') || '', person = q.get('p') || '', name = q.get('n') || '';
         const run = (async () => {
-          const cred = await A.signInWithEmailLink(auth, email.trim(), location.href);
-          if (pw) await A.updatePassword(cred.user, pw);
-          const em = (cred.user.email || email).toLowerCase();
-          const inv = await F.getDoc(F.doc(db, 'invites', em));
-          if (!inv.exists()) throw new Error('Invitationen findes ikke længere. Bed administratoren om en ny.');
-          const d = inv.data();
-          try { await A.updateProfile(cred.user, { displayName: d.name || '' }); } catch (e) {}
-          await F.setDoc(F.doc(db, 'access', cred.user.uid), { name: d.name || em, email: em, status: 'approved', person: d.person, via: 'invite', ts: new Date().toISOString() });
+          const em = email.trim().toLowerCase();
+          let cred;
+          try { cred = await A.createUserWithEmailAndPassword(auth, em, pw); }
+          catch (e) { if (e && e.code === 'auth/email-already-in-use') cred = await A.signInWithEmailAndPassword(auth, em, pw); else throw e; }
+          try { if (name) await A.updateProfile(cred.user, { displayName: name }); } catch (e) {}
+          try {
+            await F.setDoc(F.doc(db, 'access', cred.user.uid), { name: name || em, email: em, status: 'approved', person, token, via: 'invite', ts: new Date().toISOString() });
+          } catch (e) { throw new Error('Linket passer ikke til din e-mail, eller det er erstattet af en nyere invitation. Bed om et nyt.'); }
           try { history.replaceState(null, '', location.pathname); } catch (e) {}
         })();
         self.invitePromise = run.finally(() => { self.invitePromise = null; });
@@ -2014,13 +2012,13 @@ window.FlowHelpers = { nextRecurDate, relTime, isoOf, addDays };
 
   // ---------- Teams ----------
   // Personlig Teams-besked: sendes til en Power Automate-workflow, der skriver til modtageren i en 1:1-chat.
-  function postTeams(note, state) {
+  function postTeams(note, state, linkOverride) {
     const url = CFG.teamsWebhookUrl;  // sat ved login fra databasen (private/teams)
     if (!url || !note.channel) return;
     const to = state.people.find((p) => p.id === note.to);
     if (!to || !to.email) return;
     const task = state.tasks.find((t) => t.id === note.task);
-    const link = location.origin + location.pathname + '#task=' + encodeURIComponent(note.task || '');
+    const link = linkOverride || (location.origin + location.pathname + '#task=' + encodeURIComponent(note.task || ''));
     const card = {
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json', type: 'AdaptiveCard', version: '1.4',
       body: [
@@ -2029,7 +2027,7 @@ window.FlowHelpers = { nextRecurDate, relTime, isoOf, addDays };
         { type: 'TextBlock', text: note.body, wrap: true, spacing: 'Small' },
         task ? { type: 'TextBlock', text: 'Opgave: ' + task.title, isSubtle: true, size: 'Small', wrap: true } : null
       ].filter(Boolean),
-      actions: [{ type: 'Action.OpenUrl', title: 'Åbn i Flow', url: link }]
+      actions: [{ type: 'Action.OpenUrl', title: linkOverride ? 'Opret mit login' : 'Åbn i Flow', url: link }]
     };
     const payload = { to: to.email, title: note.title, text: note.body, link, card: JSON.stringify(card),
       type: 'message', attachments: [{ contentType: 'application/vnd.microsoft.card.adaptive', content: card }] };
@@ -2071,7 +2069,7 @@ window.FlowHelpers = { nextRecurDate, relTime, isoOf, addDays };
       if (mode === 'invite') {
         if (f.pw.length < 6) { setErr('Adgangskoden skal være mindst 6 tegn.'); return; }
         setBusy(true);
-        try { await store.completeInvite(f.email, f.pw); } catch (e) { setErr(e && e.code === 'auth/invalid-action-code' ? 'Linket er udløbet eller allerede brugt. Bed om en ny invitation.' : errText(e)); setBusy(false); }
+        try { await store.completeInvite(f.email, f.pw); } catch (e) { setErr(e && e.code === 'auth/wrong-password' || (e && e.code === 'auth/invalid-credential') ? 'Du har allerede en konto. Brug din nuværende adgangskode.' : errText(e)); setBusy(false); }
         return;
       }
       // Fælde til bots: skjult felt udfyldt eller formular sendt urealistisk hurtigt
@@ -2214,7 +2212,15 @@ window.FlowHelpers = { nextRecurDate, relTime, isoOf, addDays };
     if (store.getPrivate) { const t = await store.getPrivate('teams'); CFG.teamsWebhookUrl = (t && t.url) || ''; }
     const logic = new window.FlowComponent({ me: me.id, data: initial, isAdmin: admin && store.mode === 'firebase', onLogout: () => store.signOut(),
       setAccess: (uid, patch) => store.setAccess(uid, patch).catch((e) => logic.flash('Kunne ikke gemme adgang: ' + errText(e))),
-      invite: store.sendInvite ? (person) => store.sendInvite(person, me.id) : null,
+      invite: store.createInvite ? async (person) => {
+        const link = await store.createInvite(person, me.id);
+        let copied = false;
+        try { await navigator.clipboard.writeText(link); copied = true; } catch (e) {}
+        const teams = !!CFG.teamsWebhookUrl;
+        if (teams) postTeams({ channel: 'Teams', to: person.id, tag: 'INVITATION', task: null,
+          title: 'Du er inviteret til Flow', body: 'Klik på knappen og vælg en adgangskode. Brug din e-mail ' + person.email + '.' }, logic.state, link);
+        return { teams, copied };
+      } : null,
       saveTeamsUrl: store.setPrivate && admin ? async (url) => { await store.setPrivate('teams', { url: url.trim(), by: me.id, ts: new Date().toISOString() }); CFG.teamsWebhookUrl = url.trim(); } : null });
     window.__flow = logic;
 
