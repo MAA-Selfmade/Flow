@@ -1,0 +1,20 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Flow//Påmindelse//DA
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:flow-appcheck-20260925@selfmade
+DTSTAMP:20260924T120000Z
+DTSTART:20260925T070000Z
+DTEND:20260925T071500Z
+SUMMARY:Flow: slå App Check til (Enforce)
+DESCRIPTION:1. Åbn console.firebase.google.com → projektet Flow.\n2. Security → App Check → fanen APIs.\n3. Tjek at kaldene til Cloud Firestore og Authentication står som "verified".\n4. Klik Enforce på Cloud Firestore og på Authentication.\nStår mange kald som "unverified"\, så vent og spørg Claude først.
+LOCATION:https://console.firebase.google.com
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Flow: slå App Check til
+TRIGGER:-PT0M
+END:VALARM
+END:VEVENT
+END:VCALENDAR
