@@ -1194,7 +1194,10 @@ class Component extends DCLogic {
     if (!title.trim()) { this.flash('Giv opgaven en titel først, så filen kan lægges i en mappe med opgavens navn.'); return; }
     const folder = this.safeName(title).slice(0, 80) || 'Opgave';
     const existing = () => isDraft ? ((this.state.draft || {}).files || []) : ((this.T(target) || {}).files || []);
-    arr.forEach((file, k) => {
+    const OK = ['docx', 'xlsx', 'pptx', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'csv', 'txt', 'mp4', 'mov'];
+    const bad = arr.filter(f => OK.indexOf((f.name.split('.').pop() || '').toLowerCase()) < 0);
+    if (bad.length) this.flash('“' + bad[0].name + '” kan ikke uploades. Tilladt: Word, Excel, PowerPoint, PDF, billeder, CSV, tekst og video.');
+    arr.filter(f => bad.indexOf(f) < 0).forEach((file, k) => {
       const taken = existing().map(f => f.name.toLowerCase());
       let name = this.safeName(file.name) || ('fil-' + Date.now());
       if (taken.indexOf(name.toLowerCase()) >= 0) { const dot = name.lastIndexOf('.'), base = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
@@ -2443,11 +2446,13 @@ window.FlowHelpers = { nextRecurDate, relTime, isoOf, addDays };
       import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`)
     ]);
     const app = initializeApp(cfg.firebase);
-    // App Check med reCAPTCHA v3: kun kald fra jeres egen side accepteres af login og database.
+    // App Check med Fraud Defense (reCAPTCHA Enterprise): kun kald fra jeres egen side accepteres af login og database.
     if (cfg.recaptchaSiteKey && !cfg.emulator) {
       const AC = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app-check.js`);
       if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-      AC.initializeAppCheck(app, { provider: new AC.ReCaptchaV3Provider(cfg.recaptchaSiteKey), isTokenAutoRefreshEnabled: true });
+      // Fraud Defense (tidl. reCAPTCHA Enterprise) er standard; den gamle reCAPTCHA v3 er udfaset af Google.
+      const provider = cfg.recaptchaClassic ? new AC.ReCaptchaV3Provider(cfg.recaptchaSiteKey) : new AC.ReCaptchaEnterpriseProvider(cfg.recaptchaSiteKey);
+      AC.initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true });
     }
     const auth = A.getAuth(app);
     const db = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) });
