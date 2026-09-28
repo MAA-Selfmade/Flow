@@ -11,8 +11,8 @@ window.FLOW_CONFIG = {
   admins: ["maa@selfmade.com"],
   // Engangs-kobling ved opstart: person-ID fra importen → e-mail. Rør ikke, når det er gjort.
   bootstrapEmails: { u1: "lkk@selfmade.com", u2: "dtv@selfmade.com", u3: "maa@selfmade.com" },
-  // reCAPTCHA v3 site key til App Check (se OPSÆTNING.md). Tom = ingen App Check.
-  recaptchaSiteKey: "6LfQg8wtAAAAAG6QvF9zuZQXXmT0avgzO8FF90Wk",
+  // Site key til App Check (Fraud Defense / reCAPTCHA Enterprise, se OPSÆTNING.md). Tom = ingen App Check.
+  recaptchaSiteKey: "6Lcip9MtAAAAAIFlpPtxvstnQucxGkbvSvvieOz3",
   // Teams-URL ligger IKKE her (filen er offentlig). Den gemmes under Team i appen.
   teamsWebhookUrl: ""
 };
