@@ -171,25 +171,32 @@
   function style() {
     if (styleDone) return; styleDone = true;
     const s = document.createElement('style');
-    s.textContent = '@keyframes flowPop{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}18%{transform:translate(-50%,-50%) scale(1.08);opacity:1}30%{transform:translate(-50%,-50%) scale(1)}82%{opacity:1}100%{transform:translate(-50%,-60%) scale(.96);opacity:0}}' +
-      '@keyframes flowShake{0%,100%{transform:rotate(0)}25%{transform:rotate(-6deg)}75%{transform:rotate(6deg)}}' +
-      '.flow-cele-banner{position:fixed;left:50%;top:42%;z-index:10001;pointer-events:none;text-align:center;animation:flowPop 2.4s ease-out forwards;font-family:Archivo,system-ui,sans-serif;background:rgba(255,255,255,.92);border-radius:14px;padding:18px 30px 16px;box-shadow:0 12px 40px rgba(35,31,32,.18)}' +
-      '.flow-cele-banner .big{font-size:44px;font-weight:700;letter-spacing:-.02em;color:#231F20;text-shadow:0 2px 0 #fff,0 0 24px rgba(255,255,255,.9);white-space:nowrap}' +
-      '.flow-cele-banner .em{display:inline-block;animation:flowShake .5s ease-in-out 3}' +
-      '.flow-cele-banner .sub{margin-top:6px;font-size:15px;font-weight:600;color:#4A443F;text-shadow:0 1px 0 #fff,0 0 14px rgba(255,255,255,.9)}';
+    s.textContent = '@keyframes flowPop{0%{transform:translate(-50%,12px);opacity:0}12%{transform:translate(-50%,0);opacity:1}85%{transform:translate(-50%,0);opacity:1}100%{transform:translate(-50%,6px);opacity:0}}' +
+      '.flow-cele-banner{position:fixed;left:50%;bottom:92px;z-index:10001;pointer-events:none;display:flex;align-items:center;gap:10px;animation:flowPop 3s ease-out forwards;font-family:Archivo,system-ui,sans-serif;background:#231F20;color:#fff;border-radius:6px;padding:10px 16px;box-shadow:0 8px 24px rgba(35,31,32,.25);white-space:nowrap}' +
+      '.flow-cele-banner .em{font-size:18px;line-height:1}' +
+      '.flow-cele-banner .big{font-size:13.5px;font-weight:600}' +
+      '.flow-cele-banner .sub{font-size:12.5px;color:#B5AEA6}';
     document.head.appendChild(s);
   }
 
   function banner(big, sub, emoji) {
     style();
     const d = document.createElement('div'); d.className = 'flow-cele-banner';
-    const e = (emoji ? ' <span class="em">' + emoji + '</span>' : '');
     const esc = (x) => String(x || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    d.innerHTML = '<div class="big">' + esc(big) + e + '</div>' + (sub ? '<div class="sub">' + esc(sub) + '</div>' : '');
+    d.innerHTML = (emoji ? '<span class="em">' + emoji + '</span>' : '') + '<span class="big">' + esc(big) + '</span>' + (sub ? '<span class="sub">· ' + esc(sub) + '</span>' : '');
     document.body.appendChild(d);
-    setTimeout(() => d.remove(), 2500);
+    setTimeout(() => d.remove(), 3100);
   }
 
+  // Emoji tegnes én gang til et lille billede og genbruges (fillText pr. frame er tungt)
+  const SPR = {};
+  function sprite(ch, size) {
+    const k = ch + '|' + size; if (SPR[k]) return SPR[k];
+    const c = document.createElement('canvas'), d = Math.ceil(size * 1.3); c.width = c.height = d;
+    const g = c.getContext('2d'); g.font = size + 'px system-ui,"Apple Color Emoji","Segoe UI Emoji"'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, d / 2, d / 2 + size * 0.05);
+    return (SPR[k] = c);
+  }
+  function heart(g, sz) { const r = sz / 2; g.beginPath(); g.moveTo(0, r * 0.9); g.bezierCurveTo(-r * 1.6, -r * 0.2, -r * 0.6, -r * 1.3, 0, -r * 0.45); g.bezierCurveTo(r * 0.6, -r * 1.3, r * 1.6, -r * 0.2, 0, r * 0.9); g.fill(); }
   // Fælles partikelmotor
   function run(spawn, ms) {
     const c = document.createElement('canvas');
@@ -206,7 +213,11 @@
         const p = ps[i]; p.life -= 16; if (p.life <= 0 || p.y > H + 60 || p.y < -120) { ps.splice(i, 1); continue; }
         p.vy += p.g; p.vx *= p.drag; p.vy *= p.drag; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
         g.save(); g.globalAlpha = Math.max(0, Math.min(1, p.life / 400)); g.translate(p.x, p.y); g.rotate(p.rot);
-        if (p.emoji) { g.font = p.size + 'px system-ui,"Apple Color Emoji","Segoe UI Emoji"'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(p.emoji, 0, 0); }
+        if (p.emoji) { const im = sprite(p.emoji, Math.round(p.size / 4) * 4); g.drawImage(im, -im.width / 2, -im.height / 2); }
+        else if (p.shape === 'heart') { g.fillStyle = p.color; heart(g, p.size); }
+        else if (p.shape === 'flame') { const k = Math.max(0, p.life / p.max), sz = p.size * (1.6 - k);
+          g.globalCompositeOperation = 'lighter'; g.globalAlpha = Math.min(1, k * 1.4);
+          g.fillStyle = k > 0.7 ? '#FFE27A' : k > 0.4 ? '#FF9A1F' : '#E8401C'; g.beginPath(); g.arc(0, 0, sz / 2, 0, 6.283); g.fill(); }
         else if (p.shape === 'dot') { g.fillStyle = p.color; g.beginPath(); g.arc(0, 0, p.size / 2, 0, 6.283); g.fill(); }
         else { g.fillStyle = p.color; g.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2); }
         g.restore();
@@ -227,8 +238,12 @@
         } }, 2800);
     },
     fire() {
-      run((ps, W, H, t) => { const n = t === 0 ? 30 : 3;
-        for (let i = 0; i < n; i++) ps.push(P({ emoji: pick(['🔥', '🔥', '🔥', '✨']), x: rnd(0, W), y: H + 30, vx: rnd(-0.6, 0.6), vy: rnd(-9, -5), g: 0.05, drag: 0.995, size: rnd(26, 46), vr: rnd(-0.02, 0.02), life: rnd(1800, 2600) })); }, 2600);
+      // To flammekastere fra de nederste hjørner
+      run((ps, W, H, t) => { if (t > 900) return;
+        for (const side of [0, 1]) for (let i = 0; i < 7; i++) {
+          const a = (side ? rnd(235, 250) : rnd(290, 305)) * Math.PI / 180, sp = rnd(24, 34), life = rnd(450, 700);
+          ps.push(P({ shape: 'flame', x: side ? W + 5 : -5, y: H + 5, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: -0.12, drag: 0.955, size: rnd(16, 30), life, max: life }));
+        } }, 1500);
     },
     rocket() {
       let x = -60, y = window.innerHeight * 0.85;
@@ -247,9 +262,14 @@
       }, 2600);
     },
     rain() {
-      const set = pick([['🎉', '✨', '🙌'], ['💪', '⭐', '✅'], ['🧵', '✂️', '🪡', '✨'], ['🍾', '🥳', '🎊']]);
-      run((ps, W, H, t) => { const n = t === 0 ? 25 : 2;
-        for (let i = 0; i < n; i++) ps.push(P({ emoji: pick(set), x: rnd(0, W), y: -40, vx: rnd(-1, 1), vy: rnd(2, 5), g: 0.12, drag: 0.99, size: rnd(24, 40), vr: rnd(-0.05, 0.05), life: 3200 })); }, 2400);
+      // Som konfetti, bare med hjerter
+      let fired = false;
+      run((ps, W, H) => { if (fired) return; fired = true;
+        for (const side of [0, 1]) for (let i = 0; i < 55; i++) {
+          const a = side ? rnd(200, 250) : rnd(290, 340), sp = rnd(9, 16), r = a * Math.PI / 180;
+          ps.push(P({ shape: 'heart', x: side ? W + 10 : -10, y: H * 0.75, vx: Math.cos(r) * sp, vy: Math.sin(r) * sp, vr: rnd(-0.08, 0.08), size: rnd(12, 20), drag: 0.985, g: 0.2, life: rnd(2200, 3000),
+            color: pick(['#E2007A', '#FF4D8D', '#ED1C3A', '#FF8FB8', '#C4005E']) }));
+        } }, 2800);
     }
   };
 
@@ -753,13 +773,15 @@ class Component extends DCLogic {
   celebrate(tasks, t) {
     if (!window.FlowCelebrate) return;
     const S = this.myStats(tasks), pk = window.FlowCelebrate.pick;
-    const name = (this.U(this.state.me).name || '').split(' ')[0];
+    const sun = addDays(this.weekDays(0)[0], 6), me = this.state.me;
+    const weekDue = (x) => x.owner === me && x.due && x.due <= sun && !x.ongoing && !this.archived(x);
+    const left = tasks.filter(x => weekDue(x) && x.status !== 'faerdig' && x.status !== 'ide').length;
+    if (left === 0 && t.due && t.due <= sun) return window.FlowCelebrate('fireworks', 'Ugen er klaret!', 'Alle ugens opgaver er færdige', '🏆');
     if (S.today >= 3) return window.FlowCelebrate('fire', S.today === 3 ? 'You\'re on fire!' : pk(['Stadig on fire!', 'Ustoppelig!', 'Hattrick+!']), S.today + ' opgaver færdige i dag', '🔥');
     if (S.doneLFull > 0 && S.done === S.doneLFull + 1) return window.FlowCelebrate('fireworks', 'Ny ugerekord!', S.done + ' færdige – mere end hele sidste uge', '🏆');
     if (S.streak >= 3 && S.today === 1) return window.FlowCelebrate('fireworks', S.streak + ' dage i træk!', 'Mindst én opgave færdig hver dag', '⚡');
     if (t.due && t.due > TODAY) return window.FlowCelebrate('rocket', 'Før deadline!', dayDiff(t.due, TODAY) + (dayDiff(t.due, TODAY) === 1 ? ' dag' : ' dage') + ' til overs', '🚀');
-    const lines = ['Godt gået' + (name ? ', ' + name : '') + '!', 'Sådan!', 'Klaret!', 'Boom!', 'Én mindre på listen!', 'Flot arbejde!', 'Yes!'];
-    window.FlowCelebrate(pk(['confetti', 'confetti', 'rain']), pk(lines), S.done + (S.done === 1 ? ' færdig' : ' færdige') + ' denne uge', pk(['🎉', '🙌', '✨', '💪']));
+    window.FlowCelebrate(pk(['confetti', 'confetti', 'rain']));
   }
   resolveStatusDates(kind) {
     const a = this.state.statusDateAsk; if (!a) return;
