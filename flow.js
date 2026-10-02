@@ -690,9 +690,10 @@ class Component extends DCLogic {
       if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); this.undo(); } };
     window.addEventListener('keydown', this.onKey);
     this.iv = setInterval(() => { if (this.anyRun() && !this.autoStop()) this.setState({ tick: Date.now() }); }, 1000);
-    this.iv2 = setInterval(() => { const t = isoOf(new Date()); if (t !== TODAY) { TODAY = t; this.staleCheck(); } this.setState({ tick: Date.now() }); }, 60000);
-    this.st0 = setTimeout(() => { if (this.anyRun()) this.autoStop(); this.staleCheck(); }, 2500); }
-  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); clearInterval(this.iv); clearInterval(this.iv2); clearTimeout(this.st0); if (this.tt) clearTimeout(this.tt); }
+    this.iv2 = setInterval(() => { const t = isoOf(new Date()); if (t !== TODAY) { TODAY = t; this.staleCheck(); this.retentionCheck(); } this.setState({ tick: Date.now() }); }, 60000);
+    this.st0 = setTimeout(() => { if (this.anyRun()) this.autoStop(); this.staleCheck(); }, 2500);
+    this.st1 = setTimeout(() => this.retentionCheck(), 20000); }
+  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); clearInterval(this.iv); clearInterval(this.iv2); clearTimeout(this.st0); clearTimeout(this.st1); if (this.tt) clearTimeout(this.tt); }
 
   snap(label) {
     const s = this.state;
@@ -1103,6 +1104,20 @@ class Component extends DCLogic {
       checklist: (t.checklist || []).map((c, j) => Object.assign({}, c, { id: 'c' + Date.now() + '-' + j, done: false, due: c.due ? addDays(c.due, shift) : null })),
       comments: [], files: (t.files || []).filter(f => f.kind === 'LINK'), deps: [], waiting: null, doneAt: null, parkedAt: null, planned: null, spent: 0,
       recurFrom: t.id, recurCount: count, log: [{ by: this.state.me, text: 'Oprettet automatisk fra gentagelse', ts: new Date().toISOString() }], dirty: false });
+  }
+  // Oprydning: data ældre end 2 år slettes (jf. Privatliv og data). Kører kun hos administrator.
+  retentionCheck() {
+    if (!this.props.isAdmin) return;
+    const cut = addDays(TODAY, -730), s = this.state;
+    const old = (t) => (t.status === 'faerdig' && t.doneAt && t.doneAt < cut) || (t.archivedAt && t.archivedAt < cut);
+    const gone = s.tasks.filter(old); const ids = {}; gone.forEach(t => { ids[t.id] = 1; });
+    const entries = s.entries.filter(e => !ids[e[0]] && !(e[2] && e[2] < cut));
+    const notes = s.notes.filter(n => !(n.task && ids[n.task]) && !(n.ts && n.ts.slice(0, 10) < cut));
+    const nE = s.entries.length - entries.length, nN = s.notes.length - notes.length;
+    if (!gone.length && !nE && !nN) return;
+    if (this.props.deleteStored) gone.forEach(t => (t.files || []).forEach(f => { if (f.path) this.props.deleteStored(f.path); }));
+    this.setState({ tasks: s.tasks.filter(t => !ids[t.id]), entries, notes });
+    this.flash('Oprydning: ' + [gone.length ? gone.length + ' opgaver' : '', nE ? nE + ' tidsregistreringer' : '', nN ? nN + ' beskeder' : ''].filter(x => x).join(', ') + ' ældre end 2 år er slettet.');
   }
   // Påmindelser om stillestående opgaver er fjernet: indbakken er kun til omtaler og afhængigheder. Rydder gamle op.
   staleCheck() {
