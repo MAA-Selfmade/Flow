@@ -297,7 +297,7 @@
       '<li><b>Konto:</b> navn, e-mail, initialer, farve og om din adgang er godkendt.</li>' +
       '<li><b>Arbejdsopgaver:</b> opgaver, tjeklistepunkter, kommentarer, noter, vedhæftede filer og hvem der har oprettet, ændret og afsluttet dem, med dato.</li>' +
       '<li><b>Tid:</b> dine tidsregistreringer (opgave, dato og antal timer) og kørende timere.</li>' +
-      '<li><b>Præstationer:</b> tal beregnet ud fra ovenstående, fx antal færdige opgaver, afkrydsede punkter og timer pr. uge.</li>' +
+      '<li><b>Min uge:</b> tal beregnet ud fra ovenstående, fx antal færdige opgaver, afkrydsede punkter og timer pr. uge.</li>' +
       '<li><b>Teknisk:</b> loginoplysninger hos Google Firebase og en sikkerhedskontrol (App Check), der afviser trafik, som ikke kommer fra Flow.</li>' +
       '</ul><p>Flow registrerer ikke din placering, din browserhistorik eller hvad du laver uden for Flow.</p>'],
     ['Hvorfor', '<p>Oplysningerne bruges til at planlægge, fordele og følge op på afdelingens arbejde, til at registrere tidsforbrug og til at give dig et overblik over din egen indsats.</p>'],
@@ -305,7 +305,7 @@
     ['Hvem kan se hvad', '<ul>' +
       '<li>Alle godkendte brugere kan se opgaver, kommentarer og tidsregistreringer, der ikke er markeret som private.</li>' +
       '<li>Private opgaver og noter vises kun for den, der har lavet dem.</li>' +
-      '<li>Din præstationsside vises for dig og for administrator. Andre brugere ser kun holdets gennemsnit, ikke dine tal.</li>' +
+      '<li>Din side under Min uge vises for dig og for administrator. Andre brugere ser kun holdets gennemsnit, ikke dine tal.</li>' +
       '<li>Administrator kan godkende og fjerne brugere og se holdets samlede tal.</li>' +
       '</ul>'],
     ['Hvor data ligger', '<p>Data opbevares hos Google (Firebase), som er databehandler for Selfmade. Databasen ligger i Googles europæiske region eur3 (Belgien og Holland), og filer ligger i europe-west1 (Belgien). Data overføres ikke til lande uden for EU/EØS som led i den almindelige drift.</p>'],
@@ -1310,6 +1310,10 @@ class Component extends DCLogic {
       : Object.assign({}, x, { dirty: true, checklist: x.checklist.map((c, i) => i === idx ? Object.assign({}, c, { done: nowDone, doneAt: nowDone ? TODAY : null, doneBy: nowDone ? this.state.me : null }) : c) }));
     const st = { tasks, warn: null };
     if (nowDone && t.status !== 'faerdig' && t.checklist.every((c, i) => i === idx || c.done)) st.allDoneAsk = taskId;
+    if (nowDone) { const g = it.group || 'main', inG = t.checklist.filter(c => (c.group || 'main') === g);
+      if (inG.length >= 2 && inG.every(c => c === it || c.done) && window.FlowCelebrate) {
+        const name = (this.lists(t).find(l => l.id === g) || {}).name || 'Checkliste';
+        setTimeout(() => window.FlowCelebrate(window.FlowCelebrate.pick(['confetti', 'rain']), name + ' er klaret', t.title, '✅'), 0); } }
     if (nowDone) {
       const next = t.checklist.filter(x => x.after === it.id && !x.done);
       const actor = this.U(this.state.me);
@@ -1873,7 +1877,7 @@ class Component extends DCLogic {
 
     const v = {
       navMain: [mk('dag','Min dag','◆'), Object.assign(mk('inbox','Indbakke','✉'), { badge: unread || null })],
-      navViews: [mk('tabel','Opgaver','☰'), mk('lob','Løbende arbejde','↻'), mk('gantt','Tidslinje','▭'), mk('kal','Kalender','▦'), mk('board','Board','▤'), mk('tid','Tid','◷'), mk('dash','Overblik','◫'), mk('pres','Præstationer','★')],
+      navViews: [mk('tabel','Opgaver','☰'), mk('lob','Løbende arbejde','↻'), mk('gantt','Tidslinje','▭'), mk('kal','Kalender','▦'), mk('board','Board','▤'), mk('tid','Tid','◷'), mk('dash','Overblik','◫'), mk('pres','Min uge','★')],
       projectNav: s0.projects.map(p => ({ name: p.name, color: p.color,
         open: s0.tasks.filter(t => this.inArea(t, p.id) && t.status !== 'faerdig' && !t.ongoing && !this.hiddenFor(t)).length,
         active: s0.projFilter === p.id,
@@ -1973,7 +1977,7 @@ class Component extends DCLogic {
       board: ['Board', 'Én bane pr. person, søjler efter status'],
       tid: ['Tid', 'Registrering, estimat og afvigelse'],
       dash: ['Overblik', 'Afdelingens opgaver og tidsforbrug'],
-      pres: ['Præstationer', 'Ugescore, missioner og milepæle']
+      pres: ['Min uge', 'Ugescore, missioner og milepæle']
     };
     v.viewTitle = titles[s.view][0]; v.viewSub = titles[s.view][1];
     v.pres = s.view === 'pres' ? this.presView() : null;
