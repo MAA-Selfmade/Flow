@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flow</title>
 <meta name="theme-color" content="#231F20">
-<link rel="manifest" href="manifest.webmanifest?v=muv94wn3">
-<link rel="icon" href="icon.svg?v=muv94wn3" type="image/svg+xml">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=muv94wn3">
+<link rel="manifest" href="manifest.webmanifest?v=mv0ldc9s">
+<link rel="icon" href="icon.svg?v=mv0ldc9s" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=mv0ldc9s">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -21,6 +21,24 @@
   ::-webkit-scrollbar-track{background:transparent}
   @keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
   @keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.35}}
+  @media (max-width: 759px){
+    .f-root{min-height:0!important;height:100dvh!important;overflow:hidden!important}
+    .f-side{position:fixed!important;left:0;top:0;bottom:0;z-index:70;width:260px!important;transition:transform .2s ease}
+    .f-main{min-width:0!important;padding-bottom:58px}
+    .f-head{height:auto!important;min-height:54px;padding:8px 12px!important;gap:8px!important;flex-wrap:wrap}
+    .f-sub{display:none}
+    .f-day{flex-direction:column!important;padding:14px 12px 24px 12px!important;gap:16px!important;align-items:stretch!important}
+    .f-dayside{width:100%!important}
+    .f-ov{padding:0!important}
+    .f-box{width:100%!important;max-width:100%!important;height:100dvh!important;max-height:100dvh!important;border-radius:0!important;border:none!important}
+    .f-cols{grid-template-columns:minmax(0,1fr)!important}
+    .f-cols>div{border-right:none!important}
+    .f-hide-m{display:none!important}
+    .f-drow{flex-wrap:wrap;gap:6px 10px!important;padding:10px 12px!important}
+    .f-dtitle{flex:1 1 calc(100% - 40px)!important;flex-wrap:wrap;row-gap:2px!important}
+    .f-dtitle>div{white-space:normal!important}
+    .f-dwrap{flex:1 1 auto!important;width:auto!important;justify-content:flex-start!important;margin-left:23px}
+  }
 </style>
 
 </head>
@@ -28,7 +46,7 @@
 <div id="root"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
-<script src="config.js?v=muv94wn3"></script>
-<script src="flow.js?v=muv94wn3"></script>
+<script src="config.js?v=mv0ldc9s"></script>
+<script src="flow.js?v=mv0ldc9s"></script>
 </body>
 </html>
