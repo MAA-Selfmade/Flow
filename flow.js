@@ -690,13 +690,16 @@ class Component extends DCLogic {
       if (k === 'escape' && this.state.srchUI) { this.setState({ srchUI: null }); return; }
       if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); this.undo(); } };
     window.addEventListener('keydown', this.onKey);
+    this.onHash = () => this.openFromLink();
+    window.addEventListener('hashchange', this.onHash);
+    this.stLink = setTimeout(() => this.openFromLink(), 400);
     this.onResize = () => { const m = window.innerWidth < 760; if (m !== this.state.mobile) this.setState({ mobile: m, sideOpen: false }); };
     window.addEventListener('resize', this.onResize);
     this.iv = setInterval(() => { if (this.anyRun() && !this.autoStop()) this.setState({ tick: Date.now() }); }, 1000);
     this.iv2 = setInterval(() => { const t = isoOf(new Date()); if (t !== TODAY) { TODAY = t; this.staleCheck(); this.retentionCheck(); } this.setState({ tick: Date.now() }); }, 60000);
     this.st0 = setTimeout(() => { if (this.anyRun()) this.autoStop(); this.staleCheck(); }, 2500);
     this.st1 = setTimeout(() => this.retentionCheck(), 20000); }
-  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); window.removeEventListener('resize', this.onResize); clearInterval(this.iv); clearInterval(this.iv2); clearTimeout(this.st0); clearTimeout(this.st1); if (this.tt) clearTimeout(this.tt); }
+  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); window.removeEventListener('resize', this.onResize); window.removeEventListener('hashchange', this.onHash); clearTimeout(this.stLink); clearInterval(this.iv); clearInterval(this.iv2); clearTimeout(this.st0); clearTimeout(this.st1); if (this.tt) clearTimeout(this.tt); }
 
   snap(label) {
     const s = this.state;
@@ -1474,6 +1477,43 @@ class Component extends DCLogic {
 
   blankRecur() { return { mode: 'none', every: 1, weekdays: [2], dayMode: 'dag', monthDay: 25, nth: '1', nthDay: 1, month: 9, endMode: 'never', endCount: 12, endDate: '' }; }
 
+  // Opret opgave via link: #ny&titel=…&omraade=…&punkt=Tekst|Person|2026-10-25 … Åbner en udfyldt Ny opgave, som man selv bekræfter.
+  openFromLink() {
+    const h = (window.location.hash || '');
+    if (!/^#ny(&|$)/i.test(h)) return;
+    let q; try { q = new URLSearchParams(h.slice(3).replace(/^&/, '')); } catch (e) { return; }
+    try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (e) {}
+    const s = this.state, miss = [], norm = (x) => String(x || '').trim().toLowerCase();
+    const person = (n) => { if (!n) return null; const k = norm(n);
+      const p = s.people.find(x => norm(x.name) === k) || s.people.find(x => norm(x.name).split(' ')[0] === k) || s.people.find(x => norm(x.initials) === k);
+      if (!p) miss.push('person "' + n + '"'); return p ? p.id : null; };
+    const iso = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || '').trim()) ? String(d).trim() : null;
+    const one = (k) => (q.get(k) || '').trim(), all = (k) => q.getAll(k).map(x => x.trim()).filter(x => x);
+    const ex = {};
+    if (one('titel')) ex.title = one('titel').slice(0, 300);
+    if (one('beskrivelse')) ex.desc = one('beskrivelse').slice(0, 10000);
+    if (one('omraade') || one('område')) { const n = norm(one('omraade') || one('område')), p = s.projects.find(x => norm(x.name) === n); if (p) ex.project = p.id; else miss.push('område "' + (one('omraade') || one('område')) + '"'); }
+    const pr = norm(one('prio')); if (pr) ex.prio = /^h/.test(pr) ? 'hoej' : /^l/.test(pr) ? 'lav' : 'normal';
+    if (one('deadline')) { const d = iso(one('deadline')); if (d) ex.due = d; else miss.push('deadline "' + one('deadline') + '"'); }
+    if (one('start')) { const d = iso(one('start')); if (d) ex.start = d; }
+    if (one('estimat')) ex.est = one('estimat').replace('.', ',');
+    const owner = person(one('ejer')) || s.me; ex.owner = owner;
+    const mem = all('medlem').map(person).filter(x => x);
+    ex.members = [owner].concat(mem.filter(x => x !== owner)).filter((x, i, a) => a.indexOf(x) === i);
+    const labs = all('etiket').map(n => { const k = norm(n), l = (s.labelDefs || []).find(x => norm(x.name) === k) || s.projects.find(x => norm(x.name) === k); if (!l) miss.push('etiket "' + n + '"'); return l ? l.id : null; }).filter(x => x);
+    if (labs.length) ex.labels = labs;
+    const items = all('punkt').map((x, i) => { const a = x.split('|').map(y => y.trim());
+      return { id: 'c' + Date.now() + '-' + i, text: a[0].slice(0, 500), by: (a[1] ? person(a[1]) : null) || owner, due: iso(a[2]) || null, done: false }; }).filter(c => c.text);
+    if (items.length) ex.checklist = items;
+    const links = all('link').filter(u => /^https?:\/\/\S+$/i.test(u)).map(u => { const li = this.linkInfo(u);
+      return { name: li.name, url: u, kind: li.kind === 'LINK' ? 'LINK' : li.kind, host: li.host, by: s.me, when: 'nu', ts: new Date().toISOString(), size: '' }; });
+    if (links.length) ex.files = links;
+    if (/^(ja|1|true)$/i.test(one('contentplan'))) ex.inPlan = true;
+    const st = norm(one('status')); if (st) { const m = { 'idé': 'ide', ide: 'ide', pipeline: 'pipeline', 'i gang': 'gang', gang: 'gang', 'p-plads': 'pplads', review: 'review', 'til review': 'review' }; if (m[st]) ex.status = m[st]; }
+    this.setState({ view: s.view, sel: null });
+    this.openNew(ex);
+    this.flash(miss.length ? 'Opgaven er udfyldt fra linket. Kunne ikke genkende: ' + miss.join(', ') + '.' : 'Opgaven er udfyldt fra linket. Tjek den, og tryk Opret opgave.');
+  }
   openNew(extra) {
     const me = this.state.me;
     this.setState({ draft: Object.assign({ editId: null, title: '', project: '', owner: me, members: [me], labels: [], prio: 'normal',
