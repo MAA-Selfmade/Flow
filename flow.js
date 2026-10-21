@@ -702,7 +702,7 @@ class Component extends DCLogic {
     window.addEventListener('resize', this.onResize);
     this.iv = setInterval(() => { if (this.anyRun() && !this.autoStop()) this.setState({ tick: Date.now() }); }, 1000);
     this.iv2 = setInterval(() => { const t = isoOf(new Date()); if (t !== TODAY) { TODAY = t; this.staleCheck(); this.retentionCheck(); } this.setState({ tick: Date.now() }); }, 60000);
-    this.st0 = setTimeout(() => { if (this.anyRun()) this.autoStop(); this.staleCheck(); }, 2500);
+    this.st0 = setTimeout(() => { if (this.anyRun()) this.autoStop(); this.staleCheck(); this.fixRecurPipeline(); }, 2500);
     this.st1 = setTimeout(() => this.retentionCheck(), 20000); }
   componentDidUpdate() { if (!FIELD_SIZING) { const ts = document.querySelectorAll('textarea.f-grow'); for (let i = 0; i < ts.length; i++) growTA(ts[i]); } }
   componentWillUnmount() { window.removeEventListener('keydown', this.onKey); window.removeEventListener('paste', this.onPaste); window.removeEventListener('resize', this.onResize); window.removeEventListener('hashchange', this.onHash); clearTimeout(this.stLink); clearInterval(this.iv); clearInterval(this.iv2); clearTimeout(this.st0); clearTimeout(this.st1); if (this.tt) clearTimeout(this.tt); }
@@ -1107,6 +1107,12 @@ class Component extends DCLogic {
     this.flash(was ? '“' + t.title + '” er hentet fra arkivet.' : '“' + t.title + '” er arkiveret. Du finder den med Søg.');
   }
   archivedCount() { return this.state.tasks.filter(t => this.archived(t)).length; }
+  // Gentagelser blev tidligere oprettet i Pipeline og vist ikke i Min dag. Flyt dem urørte til I gang.
+  fixRecurPipeline() {
+    const bad = this.state.tasks.filter(t => t.recurFrom && t.status === 'pipeline' && (t.log || []).length <= 1);
+    if (!bad.length) return; const ids = {}; bad.forEach(t => { ids[t.id] = 1; });
+    this.setState({ tasks: this.state.tasks.map(t => ids[t.id] ? Object.assign({}, t, { status: 'gang', dirty: true }) : t) });
+  }
   nextOccurrence(t) {
     const r = t.recur, anchor = t.due || t.start || TODAY;
     let nd = nextRecurDate(r, anchor), guard = 0;
@@ -1117,7 +1123,7 @@ class Component extends DCLogic {
     if (r.endMode === 'date' && r.endDate && nd > r.endDate) return null;
     const shift = dayDiff(nd, anchor);
     const id = 'o' + Date.now();
-    return Object.assign({}, t, { id, status: 'pipeline', due: t.due ? nd : null, start: t.start ? addDays(t.start, shift) : (t.due ? null : nd),
+    return Object.assign({}, t, { id, status: 'gang', due: t.due ? nd : null, start: t.start ? addDays(t.start, shift) : (t.due ? null : nd),
       checklist: (t.checklist || []).map((c, j) => Object.assign({}, c, { id: 'c' + Date.now() + '-' + j, done: false, due: c.due ? addDays(c.due, shift) : null })),
       comments: [], files: (t.files || []).filter(f => f.kind === 'LINK'), deps: [], waiting: null, doneAt: null, parkedAt: null, planned: null, spent: 0,
       recurFrom: t.id, recurCount: count, log: [{ by: this.state.me, text: 'Oprettet automatisk fra gentagelse', ts: new Date().toISOString() }], dirty: false });
