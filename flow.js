@@ -2281,6 +2281,14 @@ class Component extends DCLogic {
           c.itemNote = null; c.portLabel = 'Dagens portion · ' + d.left + (d.left === 1 ? ' punkt' : ' punkter'); c.portArrow = open ? '▾' : '▸'; c.portOpen = open;
           c.onPortToggle = (e) => { if (e) e.stopPropagation(); this.setState({ portOpen: Object.assign({}, this.state.portOpen, { [x.id]: !open }) }); };
           c.portItems = d.portion.map(it => { const i = x.checklist.indexOf(it); return { text: it.text, onCheck: (e) => { if (e) e.stopPropagation(); this.toggleCheck(x.id, i); } }; }); }
+        else { const my = (x.checklist || []).filter(it => it.by === s.me && !it.done);
+          if (my.length) { const open = !!(s0.portOpen || {})[x.id];
+            c.onOpen = () => { if (!open) this.setState({ portOpen: Object.assign({}, this.state.portOpen, { [x.id]: true }) }); else this.open(x.id); };
+            c.onCard = (e) => { if (e) e.stopPropagation(); this.open(x.id); };
+            if (open) c.itemNote = x.owner !== s.me ? this.U(x.owner).name : null;
+            c.portLabel = 'Mine punkter · ' + my.length; c.portArrow = open ? '▾' : '▸'; c.portOpen = open;
+            c.onPortToggle = (e) => { if (e) e.stopPropagation(); this.setState({ portOpen: Object.assign({}, this.state.portOpen, { [x.id]: !open }) }); };
+            c.portItems = my.map(it => { const i = x.checklist.indexOf(it); return { text: it.text + (it.due ? ' · ' + fmt(it.due) : ''), onCheck: (e) => { if (e) e.stopPropagation(); this.toggleCheck(x.id, i); } }; }); } }
         return c; }) });
     { const mon = this.weekDays(0)[0], F = s0.follow || {};
       const rows = this.props.isAdmin ? s0.tasks.filter(t => F[t.id] && t.status !== 'faerdig' && !this.archived(t) && !(F[t.id].asked && F[t.id].asked >= mon)) : [];
