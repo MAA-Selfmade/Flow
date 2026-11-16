@@ -2300,12 +2300,14 @@ class Component extends DCLogic {
     const weekT  = take(t => keyDate(t) && dayDiff(keyDate(t), TODAY) > 0 && dayDiff(keyDate(t), TODAY) <= EOW);
     const nextW  = take(t => keyDate(t) && dayDiff(keyDate(t), TODAY) > EOW && dayDiff(keyDate(t), TODAY) <= EONW);
     const later  = take(t => true);
-    const sect = (title, ts, note, color) => ({ title, note, color, count: ts.length,
-      tasks: byPrio(ts).map(x => { const c = this.card(x);
+    // Fremadrettede sektioner sorteres efter dato (den dato der vises), derefter prioritet
+    const byDate = a => a.slice().sort((x, y) => dcmp(x, y) || PRIO[x.prio].rank - PRIO[y.prio].rank || x.title.localeCompare(y.title, 'da'));
+    const sect = (title, ts, note, color, dateFirst) => ({ title, note, color, count: ts.length,
+      tasks: (dateFirst && s.sortBy !== 'tid' ? byDate(ts) : byPrio(ts)).map(x => { const c = this.card(x);
         if (x.owner !== s.me) { const it = myItem(x);
           c.itemNote = (it ? it.text : '') + ' · ' + this.U(x.owner).name; }
         else if (itemFirst(x)) c.itemNote = myItem(x).text;
-        if (itemFirst(x)) { const du = this.dueMeta(Object.assign({}, x, { due: keyDate(x), planned: null })); c.dueLabel = du.label; c.dueColor = du.color; }
+        if (itemFirst(x) || (x.planned && x.planned !== x.due)) { const du = this.dueMeta(Object.assign({}, x, { due: keyDate(x), planned: null })); c.dueLabel = du.label; c.dueColor = du.color; }
         const d = port[x.id];
         // Fluebenet i rækken krydser mit næste punkt af, ikke hele opgaven
         { const it = d ? d.portion[0] : myItem(x);
@@ -2337,9 +2339,9 @@ class Component extends DCLogic {
     v.daySections = [
       sect('Over tid', over, '', '#9C160D'),
       sect('I dag', today, '', '#231F20'),
-      sect('Resten af ugen', weekT, '', '#0031EB'),
-      sect('Næste uge', nextW, '', '#231F20'),
-      sect('Senere', later, '', '#6E675F')
+      sect('Resten af ugen', weekT, '', '#0031EB', true),
+      sect('Næste uge', nextW, '', '#231F20', true),
+      sect('Senere', later, '', '#6E675F', true)
     ].filter(x => x.count);;
 
     const hb = s.notes.filter(n => n.to === s.me && !n.read && n.kind === 'handoff')[0];
